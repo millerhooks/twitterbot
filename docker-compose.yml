@@ -1,0 +1,24 @@
+version: '2'
+services:
+  postgres:
+    build: ./compose/postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_backup:/backups
+    env_file: .env
+
+  django:
+    image: gcr.io/nicehouse/twitterbot
+    env_file: .env
+    privileged: true
+    links:
+      - redis
+    volumes:
+       - ${PWD}/django:/home/django
+    ports:
+      - "8000:8000"
+      - "80:80"
+      - "443:443"
+
+  redis:
+    image: redis:latest

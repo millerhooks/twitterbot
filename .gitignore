@@ -1,0 +1,44 @@
+*~
+.idea
+*.log
+*.pyc
+*.swp
+*node_modules
+*bower_components
+.bash_history
+passwd
+django/fonts/archive
+gcloud-auth.json
+django.bak
+
+# This is for the apt cache proxy and database storage
+.cache
+.db
+*-e
+
+# Environments are secret
+compose/build/deploy/container_environment
+.env
+
+
+# Keys should not be committed
+id_rsa
+id_rsa.pub
+deploy_key
+deploy_key.pub
+
+.coverage
+.sass-cache
+/src/
+db.sqlite3
+main.css
+main.css.map
+.idea
+.DS_Store
+._.DS_Store
+staticfiles
+*.json.gzip
+root/var/log/*/**
+logs/**/*
+static/*
+Frontend/semantic*
