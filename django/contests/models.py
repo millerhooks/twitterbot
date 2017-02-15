@@ -87,8 +87,8 @@ class Bot(models.Model):
         return Tweet.objects.filter()
 
     @staticmethod
-    def log_and_print(self, text):
-        log = Log(body=str(text))
+    def log_and_print(text):
+        log = Log(event=str(text))
         log.save()
         return log
 
@@ -230,16 +230,28 @@ class Bot(models.Model):
 
 
 class TwitterUser(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, blank=True, null=True)
     verified = models.BooleanField(default=False)
     geo_enabled = models.BooleanField(default=False)
-    twitter_id = models.IntegerField()
-    location = models.CharField(max_length=255)
+    twitter_id = models.IntegerField(blank=True, null=True)
+    location = models.CharField(max_length=255, blank=True, null=True)
     default_profile_image = models.BooleanField(default=False)
-    profile_image_url = models.CharField(max_length=255)
+    profile_image_url = models.CharField(max_length=255, blank=True, null=True)
     follow_request_sent = models.BooleanField(default=False)
     following = models.BooleanField(default=False)
-    id_str = models.IntegerField(blank=True, null=True)
+    id_str = models.CharField(max_length=255, blank=True, null=True)
+    screen_name = models.CharField(max_length=255, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    friends_count = models.IntegerField(blank=True, null=True)
+    profile_banner_url = models.CharField(max_length=255, blank=True, null=True)
+    followers_count = models.IntegerField(blank=True, null=True)
+    statuses_count = models.IntegerField(blank=True, null=True)
+    protected = models.BooleanField(default=False)
+    contributors_enabled = models.BooleanField(default=False)
+    url = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(blank=True, null=True)
+    is_translator = models.BooleanField(default=False)
+
 
     photo = models.FileField(blank=True, null=True, upload_to="twits/photos")
 
@@ -270,7 +282,7 @@ class Tweet(models.Model):
     possibly_sensitive = models.BooleanField(default=False)
     truncated = models.BooleanField(default=False)
     in_reply_to_user_id_str = models.CharField(max_length=255, blank=True)
-    id_str = models.IntegerField(blank=True, null=True)
+    id_str = models.CharField(max_length=255, blank=True, null=True)
 
     user = models.ForeignKey(TwitterUser, blank=True, null=True)
 
