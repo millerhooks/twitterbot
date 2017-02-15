@@ -13,7 +13,8 @@ __admin__ = [
     'FavoriteKeyword',
     'Bot',
     'TwitterUser',
-    'Tweet'
+    'Tweet',
+    'Gibberish'
 ]
 
 BOT_STATUS_CHOICES = (
@@ -57,6 +58,12 @@ class FavoriteKeyword(models.Model):
     def __str__(self):
         return self.text
 
+class Gibberish(models.Model):
+    name = models.CharField(max_length=255)
+    text = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
 
 class Bot(models.Model):
     name = models.CharField(max_length=255)
