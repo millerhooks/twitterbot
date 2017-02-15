@@ -4,9 +4,9 @@ from django.db import models
 from TwitterAPI import TwitterAPI
 import threading
 import time
-import json
-import os.path
+import datetime
 import sys
+from dateutil.parser import parse
 
 __admin__ = [
     'Log',
@@ -142,12 +142,12 @@ class Bot(models.Model):
 
         for post in self.post_list:
             if not self.ratelimit[2] < self.min_ratelimit_retweet:
-                self.log_and_print("Retweeting: " + str(post['id']) + " " + str(post['text'].encode('utf8')))
+                self.log_and_print("Retweeting: " + str(post.id) + " " + str(post.text))
 
-                self.check_for_follow_requests(post)
+                self.check_for_follow_request(post)
                 self.check_for_favorite_request(post)
 
-                r = self.api.request('statuses/retweet/:' + str(post['id']))
+                r = self.api.request('statuses/retweet/:' + str(post.id))
                 self.check_error(r)
                 self.retweet_list.add(post)
                 self.save()
@@ -157,7 +157,7 @@ class Bot(models.Model):
     # Check if a post requires you to follow the user.
     # Be careful with this function! Twitter may write ban your application for following too aggressively
     def check_for_follow_request(self, post):
-        if self.follow_keywords.filter(body=post.text.lower()):
+        if self.follow_keywords.filter(text=post.text.lower()):
             r = self.api.request('friendships/create', {'screen_name': post.user.screen_name})
             self.check_error(r)
             self.log_and_print("Follow: " + post.user.screen_name)
@@ -168,12 +168,22 @@ class Bot(models.Model):
     # Check if a post requires you to favorite the tweet.
     # Be careful with this function! Twitter may write ban your application for favoriting too aggressively
     def check_for_favorite_request(self, post):
-        if self.fav_keywords.filter(body=post.text.lower()):
+        if self.fav_keywords.filter(text=post.text.lower()):
             res = self.api.request('favorites/create', {'id': post.id})
             self.check_error(res)
             self.log_and_print("Favorite: " + str(post.id))
             self.favorited_list.add(post)
             self.save()
+
+    @staticmethod
+    def object_from_dict(mod, dic):
+        # Go through the object, load in the objects we want
+        obj = {}
+        for field in mod._meta.get_fields():
+            if field.name in dic:
+                obj[field.name] = dic[field.name]
+
+        return mod.objects.get_or_create(obj)
 
     # Scan for new contests, but not too often because of the rate limit.
     def scan_for_contests(self):
@@ -194,17 +204,19 @@ class Bot(models.Model):
                         c += 1
                         user = item['user']
                         user['twitter_id'] = user['id']
+                        user['created_at'] = parse(user['created_at'])
 
-                        # get_or_create returns a tuple of object and if it had to create. Get object only.
-                        user = TwitterUser.objects.get_or_create(**user)[0]
+                        user = self.object_from_dict(TwitterUser, user)[0]
 
                         if 'retweeted_status' in item:
                             # has this user been ignored before?
-                            if not user.status == 'i':
+                            if not user in self.ignore_list.all():
                                 if item['retweet_count'] > 0:
                                     # Saving id in post_id in case django hates the id writing
                                     item['post_id'] = item['id']
-                                    post, new_post = Tweet.objects.get_or_create(**item)
+                                    item['created_at'] = parse(item['created_at'])
+                                    item['user'] = user
+                                    post, new_post = self.object_from_dict(Tweet, item)
 
                 except Exception as e:
                     # print("Could not connect to TwitterAPI - are your credentials correct?")
@@ -262,26 +274,26 @@ class TwitterUser(models.Model):
 class Tweet(models.Model):
     text = models.TextField()
 
-    in_reply_to_screen_name = models.CharField(max_length=255, blank=True)
+    in_reply_to_screen_name = models.CharField(max_length=255, blank=True, null=True)
     in_reply_to_status_id = models.IntegerField(blank=True, null=True)
-    contributors = models.CharField(max_length=255)
+    contributors = models.CharField(max_length=255, blank=True, null=True)
     is_quote_status = models.BooleanField(default=False)
-    in_reply_to_status_id_str = models.CharField(max_length=255)
-    place = models.CharField(max_length=255)
+    in_reply_to_status_id_str = models.CharField(max_length=255, blank=True, null=True)
+    place = models.CharField(max_length=255, blank=True, null=True)
     post_id = models.IntegerField(blank=True, null=True)
     favorited = models.BooleanField(default=False)
     created_at = models.DateTimeField(blank=True, null=True)
     retweet_count = models.IntegerField(blank=True, null=True)
     retweeted = models.BooleanField(default=False)
-    coordinates = models.CharField(max_length=255, blank=True)
-    source = models.CharField(max_length=255, blank=True)
-    lang = models.CharField(max_length=255, blank=True)
+    coordinates = models.CharField(max_length=255, blank=True, null=True)
+    source = models.CharField(max_length=255, blank=True, null=True)
+    lang = models.CharField(max_length=255, blank=True, null=True)
     favorite_count = models.IntegerField(blank=True, null=True)
-    geo = models.CharField(max_length=255, blank=True)
+    geo = models.CharField(max_length=255, blank=True, null=True)
     in_reply_to_user_id = models.IntegerField(blank=True, null=True)
     possibly_sensitive = models.BooleanField(default=False)
     truncated = models.BooleanField(default=False)
-    in_reply_to_user_id_str = models.CharField(max_length=255, blank=True)
+    in_reply_to_user_id_str = models.CharField(max_length=255, blank=True, null=True)
     id_str = models.CharField(max_length=255, blank=True, null=True)
 
     user = models.ForeignKey(TwitterUser, blank=True, null=True)
