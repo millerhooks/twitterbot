@@ -50,3 +50,4 @@ raven==5.32.0
 opbeat==3.5.2
 django_hosts==2.0
 whitenoise==2.0.6
+TwitterAPI==2.4.4

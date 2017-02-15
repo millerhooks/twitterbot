@@ -1,4 +1,9 @@
 version: '2'
+
+volumes:
+  postgres_data: {}
+  postgres_backup: {}
+
 services:
   postgres:
     build: ./compose/postgres
@@ -8,7 +13,7 @@ services:
     env_file: .env
 
   django:
-    image: gcr.io/nicehouse/twitterbot
+    image: gcr.io/nicehouse/twitterbot:v0.01rev2
     env_file: .env
     privileged: true
     links:

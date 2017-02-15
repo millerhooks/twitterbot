@@ -9,12 +9,16 @@ import os.path
 import sys
 
 __admin__ = [
+    'Log',
     'SearchQuery',
     'FollowKeyword',
     'FavoriteKeyword',
     'Bot',
     'TwitterUser',
-    'BotRelationship'
+    'Tweet',
+    'Favorited',
+    'Followed',
+    'Retweeted'
 ]
 
 BOT_STATUS_CHOICES = (
@@ -23,6 +27,9 @@ BOT_STATUS_CHOICES = (
     ('2', 'Reprocess'),
     ('x', 'Failed')
 )
+
+class Log(models.Model):
+    event = models.TextField()
 
 
 class SearchQuery(models.Model):
@@ -50,13 +57,12 @@ class Bot(models.Model):
     name = models.CharField(max_length=255)
     photo = models.FileField(blank=True, upload_to="bots/photos")
     status = models.CharField(max_length=1, choices=BOT_STATUS_CHOICES, blank=True, default='0')
-    retweet_list = models.TextField(blank=True)
-    retweet_follow_list = models.TextField(blank=True)
 
     consumer_key = models.CharField(max_length=255)
     consumer_secret = models.CharField(max_length=255)
     access_token_key = models.CharField(max_length=255)
     access_token_secret = models.CharField(max_length=255)
+
     retweet_update_time = models.IntegerField(default=1300, help_text="how often to update retweets")
     scan_update_time = models.IntegerField(default=1500, help_text="how often to scan for contest tweets")
     rate_limit_update_time = models.IntegerField(default=10, help_text="how often to scan for contest tweets")
@@ -69,29 +75,25 @@ class Bot(models.Model):
     follow_keywords = models.ManyToManyField(FollowKeyword)
     fav_keywords = models.ManyToManyField(FavoriteKeyword)
 
-    @property
-    def ignore_list(self):
-        return BotRelationship.objects.filter(bot=self)
-
-    @property
-    def retweet_follow_list(self):
-        return BotRelationship.objects.filter(bot=self)
-
+    retweet_list = models.ManyToManyField('TwitterUser')
+    ignore_list = models.ManyToManyField('TwitterUser')
+    retweet_follow_list = models.ManyToManyField('TwitterUser')
 
     def connect(self):
         # Don't edit these unless you know what you're doing.
         self.api = TwitterAPI(self.consumer_key, self.consumer_secret, self.access_token_key, self.access_token_secret)
-        post_list = list()
-        ratelimit = [999, 999, 100]
-        ratelimit_search = [999, 999, 100]
+        self.ratelimit = [999, 999, 100]
+        self.ratelimit_search = [999, 999, 100]
 
+    @property
+    def post_list(self):
+        return Tweet.objects.filter(did_retweet=False, did_favorite=False)
+
+    @staticmethod
     def log_and_print(self, text):
-        tmp = str(text)
-        tmp = text.replace("\n", "")
-        print(tmp)
-        f_log = open('log', 'a')
-        f_log.write(tmp + "\n")
-        f_log.close()
+        log = Log(body=str(text))
+        log.save()
+        return log
 
     def check_error(self, res):
         res = res.json()
@@ -100,18 +102,14 @@ class Bot(models.Model):
                                + res['errors'][0]['message'] +
                                " Code: "
                                + str(res['errors'][0]['code']))
-            # sys.exit(r['errors'][0]['code'])
 
     def check_rate_limit(self):
         c = threading.Timer(self.rate_limit_update_time, self.check_rate_limit)
         c.daemon = True
         c.start()
 
-        global ratelimit
-        global ratelimit_search
-
-        if ratelimit[2] < self.min_ratelimit:
-            print("Ratelimit too low -> Cooldown (" + str(ratelimit[2]) + "%)")
+        if self.ratelimit[2] < self.min_ratelimit:
+            self.log_and_print("Ratelimit too low -> Cooldown (" + str(self.ratelimit[2]) + "%)")
             time.sleep(30)
 
         r = self.api.request('application/rate_limit_status').json()
@@ -123,12 +121,11 @@ class Bot(models.Model):
                 percent = float(remaining) / float(limit) * 100
 
                 if res == "/search/tweets":
-                    ratelimit_search = [limit, remaining, percent]
+                    self.ratelimit_search = [limit, remaining, percent]
 
                 if res == "/application/rate_limit_status":
-                    ratelimit = [limit, remaining, percent]
+                    self.ratelimit = [limit, remaining, percent]
 
-                # print(res_family + " -> " + res + ": " + str(percent))
                 if percent < 5.0:
                     self.log_and_print(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!")
                     sys.exit(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!")
@@ -136,8 +133,6 @@ class Bot(models.Model):
                     self.log_and_print(res_family + " -> " + res + ": " + str(percent) + "  !!! <30% alert !!!")
                 elif percent < 70.0:
                     print(res_family + " -> " + res + ": " + str(percent))
-
-    # TODO: <Miller> Make the stuff below here, look like the stuff up there.
 
     def update_queue(self):
         u = threading.Timer(self.retweet_update_time, self.update_qQueue)
@@ -148,150 +143,80 @@ class Bot(models.Model):
 
         print("Queue length: " + str(len(self.post_list)))
 
-        if len(self.post_list) > 0:
-
-            if not ratelimit[2] < self.min_ratelimit_retweet:
-
-                post = post_list[0]
+        for post in self.post_list:
+            if not self.ratelimit[2] < self.min_ratelimit_retweet:
                 self.log_and_print("Retweeting: " + str(post['id']) + " " + str(post['text'].encode('utf8')))
 
-                CheckForFollowRequest(post)
-                CheckForFavoriteRequest(post)
+                self.check_for_follow_requests(post)
+                self.check_for_favorite_request(post)
 
-                r = api.request('statuses/retweet/:' + str(post['id']))
-                CheckError(r)
-                post_list.pop(0)
-
+                r = self.api.request('statuses/retweet/:' + str(post['id']))
+                self.check_error(r)
+                Retweeted.objects.get_or_create(tweet=post, bot=self).save()
             else:
-
-                print("Ratelimit at " + str(ratelimit[2]) + "% -> pausing retweets")
-
-
-
+                print("Ratelimit at " + str(self.ratelimit[2]) + "% -> pausing retweets")
 
     # Check if a post requires you to follow the user.
     # Be careful with this function! Twitter may write ban your application for following too aggressively
-    def CheckForFollowRequest(self, item):
-        text = item['text']
-        if any(x in text.lower() for x in follow_keywords):
-            try:
-                r = api.request('friendships/create', {'screen_name': item['retweeted_status']['user']['screen_name']})
-                CheckError(r)
-                LogAndPrint("Follow: " + item['retweeted_status']['user']['screen_name'])
-            except:
-                user = item['user']
-                screen_name = user['screen_name']
-                r = api.request('friendships/create', {'screen_name': screen_name})
-                CheckError(r)
-                LogAndPrint("Follow: " + screen_name)
+    def check_for_follow_request(self, post):
+        if self.follow_keywords.filter(body=post.text.lower()):
+            r = self.api.request('friendships/create', {'screen_name': post.user.screen_name})
+            self.check_error(r)
+            self.log_and_print("Follow: " + post.user.screen_name)
+            Followed.objects.get_or_create(tweet=post, bot=self).save()
 
     # Check if a post requires you to favorite the tweet.
     # Be careful with this function! Twitter may write ban your application for favoriting too aggressively
-    def CheckForFavoriteRequest(self, item):
-        text = item['text']
-
-        if any(x in text.lower() for x in fav_keywords):
-            try:
-                r = api.request('favorites/create', {'id': item['retweeted_status']['id']})
-                CheckError(r)
-                LogAndPrint("Favorite: " + str(item['retweeted_status']['id']))
-            except:
-                r = api.request('favorites/create', {'id': item['id']})
-                CheckError(r)
-                LogAndPrint("Favorite: " + str(item['id']))
+    def check_for_favorite_request(self, post):
+        if self.fav_keywords.filter(body=post.text.lower()):
+            res = self.api.request('favorites/create', {'id': post.id})
+            self.check_error(res)
+            self.log_and_print("Favorite: " + str(post.id))
+            Favorited.objects.get_or_create(tweet=post, bot=self).save()
 
     # Scan for new contests, but not too often because of the rate limit.
-    def ScanForContests(self):
-
-        t = threading.Timer(scan_update_time, ScanForContests)
-        t.daemon = True;
+    def scan_for_contests(self):
+        t = threading.Timer(self.scan_update_time, self.scan_for_contests)
+        t.daemon = True
         t.start()
 
-        global ratelimit_search
-
-        if not ratelimit_search[2] < min_ratelimit_search:
-
+        if not self.ratelimit_search[2] < self.min_ratelimit_search:
             print("=== SCANNING FOR NEW CONTESTS ===")
-
-            for search_query in search_queries:
-
+            for search_query in self.search_queries.all():
                 print("Getting new results for: " + search_query)
-
                 try:
-                    r = api.request('search/tweets', {'q': search_query, 'result_type': "mixed", 'count': 100})
-                    CheckError(r)
+                    res = self.api.request('search/tweets', {'q': search_query, 'result_type': "mixed", 'count': 100})
+                    self.check_error(res)
                     c = 0
 
-                    for item in r:
-                        c = c + 1
-                        user_item = item['user']
-                        screen_name = user_item['screen_name']
-                        text = item['text']
-                        text = text.replace("\n", "")
-                        id = str(item['id'])
-                        original_id = id
-                        is_retweet = 0
+                    for item in res:
+                        c += 1
+                        user = item['user']
+                        user['twitter_id'] = user['id']
+
+                        # get_or_create returns a tuple of object and if it had to create. Get object only.
+                        user = TwitterUser.objects.get_or_create(**user)[0]
 
                         if 'retweeted_status' in item:
-                            is_retweet = 1
-                            original_item = item['retweeted_status']
-                            original_id = str(original_item['id'])
-                            original_user_item = original_item['user']
-                            original_screen_name = original_user_item['screen_name']
-
-                            if not original_id in ignore_list:
-
-                                if not original_screen_name in ignore_list:
-
-                                    if not screen_name in ignore_list:
-
-                                        if item['retweet_count'] > 0:
-
-                                            post_list.append(item)
-                                            f_ign = open('ignorelist', 'a')
-
-                                            if is_retweet:
-                                                print(
-                                                    id + " - " + screen_name + " retweeting " + original_id + " - " + original_screen_name + ": " + text)
-                                                ignore_list.append(original_id)
-                                                f_ign.write(original_id + "\n")
-                                            else:
-                                                print(id + " - " + screen_name + ": " + text)
-                                                ignore_list.append(id)
-                                                f_ign.write(id + "\n")
-
-                                            f_ign.close()
-
-                                else:
-
-                                    if is_retweet:
-                                        print(id + " ignored: " + original_screen_name + " on ignore list")
-                                    else:
-                                        print(original_screen_name + " in ignore list")
-
-                            else:
-
-                                if is_retweet:
-                                    print(id + " ignored: " + original_id + " on ignore list")
-                                else:
-                                    print(id + " in ignore list")
-
-                    print("Got " + str(c) + " results")
+                            # has this user been ignored before?
+                            if not user.status == 'i':
+                                if item['retweet_count'] > 0:
+                                    # Saving id in post_id in case django hates the id writing
+                                    item['post_id'] = item['id']
+                                    post, new_post = Tweet.objects.get_or_create(**item)
 
                 except Exception as e:
                     # print("Could not connect to TwitterAPI - are your credentials correct?")
                     print("Exception: " + str(e))
-
         else:
-
             print(
-            "Search skipped! Queue: " + str(len(post_list)) + " Ratelimit: " + str(ratelimit_search[1]) + "/" + str(
-                ratelimit_search[0]) + " (" + str(ratelimit_search[2]) + "%)")
+            "Search skipped! Queue: " + str(len(self.post_list)) + " Ratelimit: " + str(self.ratelimit_search[1]) + "/" + str(
+                self.ratelimit_search[0]) + " (" + str(self.ratelimit_search[2]) + "%)")
 
     def run_bot(self):
-        CheckRateLimit()
-        ScanForContests()
-        UpdateQueue()
+        self.check_rate_limit()
+        self.scan_for_contests()
+        self.update_queue()
 
         while (True):
             time.sleep(1)
@@ -305,21 +230,68 @@ class Bot(models.Model):
 
 class TwitterUser(models.Model):
     name = models.CharField(max_length=255)
-    url = models.URLField(max_length=255, blank=True, null=True)
-    photo = models.FileField(blank=True, upload_to="twits/photos")
+    verified = models.BooleanField(default=False)
+    geo_enabled = models.BooleanField(default=False)
+    twitter_id = models.IntegerField()
+    location = models.CharField(max_length=255)
+    default_profile_image = models.BooleanField(default=False)
+    profile_image_url = models.CharField(max_length=255)
+    follow_request_sent = models.BooleanField(default=False)
+    following = models.BooleanField(default=False)
+
+    photo = models.FileField(blank=True, null=True, upload_to="twits/photos")
 
     def __str__(self):
-        return self.text
-
-BOT_RELATIONSHIP_STATUS_CHOICES = (
-    ('0', 'Ignored'),
-    ('1', 'Followed')
-)
+        return self.name
 
 
-class BotRelationship(TwitterUser):
-    bot = models.ForeignKey(Bot)
-    status = models.CharField(max_length=1, choices=BOT_RELATIONSHIP_STATUS_CHOICES, blank=True, default='1')
+class Tweet(models.Model):
+    text = models.TextField()
+
+    in_reply_to_screen_name = models.CharField(max_length=255, blank=True)
+    in_reply_to_status_id = models.IntegerField(blank=True, null=True)
+    contributors = models.CharField(max_length=255)
+    is_quote_status = models.BooleanField(default=False)
+    in_reply_to_status_id_str = models.CharField(max_length=255)
+    place = models.CharField(max_length=255)
+    post_id = models.IntegerField(blank=True, null=True)
+    favorited = models.BooleanField(default=False)
+    created_at = models.DateTimeField(blank=True, null=True)
+    retweet_count = models.IntegerField(blank=True, null=True)
+    retweeted = models.BooleanField(default=False)
+    coordinates = models.CharField(max_length=255, blank=True)
+    source = models.CharField(max_length=255, blank=True)
+    lang = models.CharField(max_length=255, blank=True)
+    favorite_count = models.IntegerField(blank=True, null=True)
+    geo = models.CharField(max_length=255, blank=True)
+    in_reply_to_user_id = models.IntegerField(blank=True, null=True)
+    possibly_sensitive = models.BooleanField(default=False)
+    truncated = models.BooleanField(default=False)
+    in_reply_to_user_id_str = models.CharField(max_length=255, blank=True)
+    id_str = models.IntegerField(blank=True, null=True)
+
+    user = models.ForeignKey(TwitterUser, blank=True, null=True)
 
     def __str__(self):
-        return self.text
+        return "%s - %s" % (self.user.name, self.text)
+
+
+class BotEvent(models.Model):
+    bot = models.ForeignKey(Bot, blank=True, null=True)
+    tweet = models.ForeignKey(Tweet, blank=True, null=True)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return "[%s] %s - %s" % (self.timestamp, self.bot.name, self.tweet)
+
+
+class Followed(BotEvent):
+    pass
+
+
+class Favorited(BotEvent):
+    pass
+
+
+class Retweeted(BotEvent):
+    pass
