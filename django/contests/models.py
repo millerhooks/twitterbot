@@ -33,7 +33,7 @@ LOG_EVENT_TYPE_CHOICES = (
 
 class Log(models.Model):
     event = models.TextField()
-    status = models.CharField(max_length=1, choices=LOG_EVENT_TYPE_CHOICES, blank=True, null=True, default='0')
+    type = models.CharField(max_length=1, choices=LOG_EVENT_TYPE_CHOICES, blank=True, null=True, default='0')
     timestamp = models.DateTimeField(auto_now=True, blank=True, null=True)
 
 
