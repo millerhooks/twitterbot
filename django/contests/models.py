@@ -1,7 +1,21 @@
 from __future__ import unicode_literals
 
 from django.db import models
+from TwitterAPI import TwitterAPI
+import threading
+import time
+import json
+import os.path
+import sys
 
+__admin__ = [
+    'SearchQuery',
+    'FollowKeyword',
+    'FavoriteKeyword',
+    'Bot',
+    'TwitterUser',
+    'BotRelationship'
+]
 
 BOT_STATUS_CHOICES = (
     ('0', 'New'),
@@ -9,12 +23,6 @@ BOT_STATUS_CHOICES = (
     ('2', 'Reprocess'),
     ('x', 'Failed')
 )
-from TwitterAPI import TwitterAPI
-import threading
-import time
-import json
-import os.path
-import sys
 
 
 class SearchQuery(models.Model):
@@ -304,7 +312,7 @@ class TwitterUser(models.Model):
         return self.text
 
 BOT_RELATIONSHIP_STATUS_CHOICES = (
-    ('0', 'Igored'),
+    ('0', 'Ignored'),
     ('1', 'Followed')
 )
 
