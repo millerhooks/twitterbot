@@ -4,10 +4,12 @@ from . import models
 
 
 class TweetInline(admin.TabularInline):
+    list_display = ('created_at', 'id', 'text',)
     model = models.Tweet
 
 
 class TwitterUserAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'id', 'name',)
     model = models.TwitterUser
     inlines = [TweetInline]
 
@@ -21,7 +23,7 @@ class BotAdmin(admin.ModelAdmin):
     filter_horizontal = ('search_queries', 'follow_keywords',
                          'fav_keywords', 'retweet_list',
                          'favorited_list', 'ignore_list',
-                         'retweet_follow_list', 'post_list')
+                         'retweet_follow_list', 'post_list', 'tweet_generator')
 
     def tweets_in_queue(self, obj):
         return len(obj.post_list.all())
@@ -34,6 +36,7 @@ __custom_admins__ = {
     "Bot": BotAdmin,
     "TwitterUser": TwitterUserAdmin,
     "Tweet": TweetAdmin,
+    "Mention": TweetAdmin,
     "Log": LogAdmin
 }
 

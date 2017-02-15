@@ -136,3 +136,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 
 STATIC_URL = '/static/'
+
+PANDORA_BOT_USER_KEY = env('PANDORA_BOT_USER_KEY', default='')
+PANDORA_BOT_APP_ID = env('PANDORA_BOT_API_ID', default='')
+PANDORA_BOT_NAME = env('PANDORA_BOT_NAME', default='Steven')
+THROTTLE_REPLY_TWEETS = env.bool('THROTTLE_REPLY_TWEETS', False)
