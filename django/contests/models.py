@@ -216,6 +216,7 @@ class Bot(models.Model):
                                     item['post_id'] = item['id']
                                     item['created_at'] = parse(item['created_at'])
                                     item['user'] = user
+                                    item['bot'] = self
                                     post, new_post = self.object_from_dict(Tweet, item)
 
                 except Exception as e:
@@ -297,6 +298,8 @@ class Tweet(models.Model):
     id_str = models.CharField(max_length=255, blank=True, null=True)
 
     user = models.ForeignKey(TwitterUser, blank=True, null=True)
+
+    bot = models.ForeignKey(Bot, blank=True, null=True)
 
     def __str__(self):
         return "%s - %s" % (self.user.name, self.text)
