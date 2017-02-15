@@ -68,24 +68,23 @@ class Bot(models.Model):
     min_ratelimit_retweet = models.IntegerField(default=20, help_text="minimum rate limit for retweets")
     min_ratelimit_search = models.IntegerField(default=40, help_text="minimum rate limit for search")
 
-    search_queries = models.ManyToManyField(SearchQuery)
-    follow_keywords = models.ManyToManyField(FollowKeyword)
-    fav_keywords = models.ManyToManyField(FavoriteKeyword)
+    search_queries = models.ManyToManyField(SearchQuery, blank=True)
+    follow_keywords = models.ManyToManyField(FollowKeyword, blank=True)
+    fav_keywords = models.ManyToManyField(FavoriteKeyword, blank=True)
 
-    retweet_list = models.ManyToManyField('Tweet', related_name='retweet_list')
-    favorited_list = models.ManyToManyField('Tweet', related_name='favorited_list')
-    ignore_list = models.ManyToManyField('TwitterUser', related_name='ignore_list')
-    retweet_follow_list = models.ManyToManyField('Tweet', related_name='retweet_follow_list')
+    retweet_list = models.ManyToManyField('Tweet', related_name='retweet_list', blank=True)
+    favorited_list = models.ManyToManyField('Tweet', related_name='favorited_list', blank=True)
+    ignore_list = models.ManyToManyField('TwitterUser', related_name='ignore_list', blank=True)
+    retweet_follow_list = models.ManyToManyField('Tweet', related_name='retweet_follow_list', blank=True)
 
     def connect(self):
-        # Don't edit these unless you know what you're doing.
         self.api = TwitterAPI(self.consumer_key, self.consumer_secret, self.access_token_key, self.access_token_secret)
         self.ratelimit = [999, 999, 100]
         self.ratelimit_search = [999, 999, 100]
 
     @property
     def post_list(self):
-        return Tweet.objects.filter(did_retweet=False, did_favorite=False)
+        return Tweet.objects.filter()
 
     @staticmethod
     def log_and_print(self, text):
@@ -133,7 +132,7 @@ class Bot(models.Model):
                     print(res_family + " -> " + res + ": " + str(percent))
 
     def update_queue(self):
-        u = threading.Timer(self.retweet_update_time, self.update_qQueue)
+        u = threading.Timer(self.retweet_update_time, self.update_queue)
         u.daemon = True
         u.start()
 
@@ -185,7 +184,7 @@ class Bot(models.Model):
         if not self.ratelimit_search[2] < self.min_ratelimit_search:
             print("=== SCANNING FOR NEW CONTESTS ===")
             for search_query in self.search_queries.all():
-                print("Getting new results for: " + search_query)
+                print("Getting new results for: " + search_query.text)
                 try:
                     res = self.api.request('search/tweets', {'q': search_query, 'result_type': "mixed", 'count': 100})
                     self.check_error(res)
@@ -240,6 +239,7 @@ class TwitterUser(models.Model):
     profile_image_url = models.CharField(max_length=255)
     follow_request_sent = models.BooleanField(default=False)
     following = models.BooleanField(default=False)
+    id_str = models.IntegerField(blank=True, null=True)
 
     photo = models.FileField(blank=True, null=True, upload_to="twits/photos")
 
