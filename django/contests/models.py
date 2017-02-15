@@ -2,11 +2,9 @@ from __future__ import unicode_literals
 
 from django.db import models
 from TwitterAPI import TwitterAPI
-import threading
-import time
-import datetime
-import sys
+import sys, json, time, threading
 from dateutil.parser import parse
+from django.apps import apps
 
 __admin__ = [
     'Log',
@@ -25,8 +23,18 @@ BOT_STATUS_CHOICES = (
     ('x', 'Failed')
 )
 
+LOG_EVENT_TYPE_CHOICES = (
+    ('0', 'Retweet'),
+    ('1', 'Favorite'),
+    ('2', 'Follow'),
+    ('3', 'Scan'),
+    ('x', 'Error'),
+)
+
 class Log(models.Model):
     event = models.TextField()
+    status = models.CharField(max_length=1, choices=LOG_EVENT_TYPE_CHOICES, blank=True, null=True, default='0')
+    timestamp = models.DateTimeField(auto_now=True, blank=True, null=True)
 
 
 class SearchQuery(models.Model):
@@ -77,14 +85,12 @@ class Bot(models.Model):
     ignore_list = models.ManyToManyField('TwitterUser', related_name='ignore_list', blank=True)
     retweet_follow_list = models.ManyToManyField('Tweet', related_name='retweet_follow_list', blank=True)
 
+    post_list = models.ManyToManyField('Tweet', related_name='post_queue', blank=True)
+
     def connect(self):
         self.api = TwitterAPI(self.consumer_key, self.consumer_secret, self.access_token_key, self.access_token_secret)
         self.ratelimit = [999, 999, 100]
         self.ratelimit_search = [999, 999, 100]
-
-    @property
-    def post_list(self):
-        return Tweet.objects.filter()
 
     @staticmethod
     def log_and_print(text):
@@ -138,9 +144,9 @@ class Bot(models.Model):
 
         print("=== CHECKING RETWEET QUEUE ===")
 
-        print("Queue length: " + str(len(self.post_list)))
+        print("Queue length: " + str(len(self.post_list.all())))
 
-        for post in self.post_list:
+        for post in self.post_list.all():
             if not self.ratelimit[2] < self.min_ratelimit_retweet:
                 self.log_and_print("Retweeting: " + str(post.id) + " " + str(post.text))
 
@@ -150,6 +156,7 @@ class Bot(models.Model):
                 r = self.api.request('statuses/retweet/:' + str(post.id))
                 self.check_error(r)
                 self.retweet_list.add(post)
+                self.post_list.remove(post)
                 self.save()
             else:
                 print("Ratelimit at " + str(self.ratelimit[2]) + "% -> pausing retweets")
@@ -177,13 +184,16 @@ class Bot(models.Model):
 
     @staticmethod
     def object_from_dict(mod, dic):
+
         # Go through the object, load in the objects we want
         obj = {}
-        for field in mod._meta.get_fields():
-            if field.name in dic:
-                obj[field.name] = dic[field.name]
+        _app = apps.get_app_config('contests')
+        _model = _app.get_model(mod)
 
-        return mod.objects.get_or_create(obj)
+        import pdb;
+        pdb.set_trace()
+        new_obj = _model.objects.get_or_create(obj)
+        return new_obj
 
     # Scan for new contests, but not too often because of the rate limit.
     def scan_for_contests(self):
@@ -196,35 +206,43 @@ class Bot(models.Model):
             for search_query in self.search_queries.all():
                 print("Getting new results for: " + search_query.text)
                 try:
-                    res = self.api.request('search/tweets', {'q': search_query, 'result_type': "mixed", 'count': 100})
-                    self.check_error(res)
-                    c = 0
+                    r = self.api.request('search/tweets', {'q': search_query, 'result_type': "mixed", 'count': 100})
+                    self.check_error(r)
+                    statuses = json.loads(r.response.content)['statuses']
 
-                    for item in res:
-                        c += 1
-                        user = item['user']
-                        user['twitter_id'] = user['id']
-                        user['created_at'] = parse(user['created_at'])
-
-                        user = self.object_from_dict(TwitterUser, user)[0]
-
-                        if 'retweeted_status' in item:
+                    #
+                    for item in statuses:
+                        # Have we tweeted this tweet before?
+                        if item not in self.retweet_list.all():
                             # has this user been ignored before?
-                            if not user in self.ignore_list.all():
-                                if item['retweet_count'] > 0:
-                                    # Saving id in post_id in case django hates the id writing
-                                    item['post_id'] = item['id']
-                                    item['created_at'] = parse(item['created_at'])
-                                    item['user'] = user
-                                    item['bot'] = self
-                                    post, new_post = self.object_from_dict(Tweet, item)
+                            if len(self.ignore_list.filter(screen_name=item['user']['screen_name'])) == 0:
+                                item['user']['created_at'] = parse(item['user']['created_at'])
 
+                                user_obj = {}
+                                for field in TwitterUser._meta.get_fields():
+                                    if field.name in item['user'].keys():
+                                        user_obj[field.name] = item['user'][field.name]
+
+                                user_obj, new_user = TwitterUser.objects.get_or_create(**user_obj)
+
+                                if item['retweet_count'] > 0:
+                                    item['created_at'] = parse(item['created_at'])
+                                    item['user'] = user_obj
+                                    item['bot'] = self
+                                    field_obj = {}
+                                    for field in Tweet._meta.get_fields():
+                                        if field.name in item.keys():
+                                            field_obj[field.name] = item[field.name]
+                                    post, new_post = Tweet.objects.get_or_create(**field_obj)
+                                    if new_post:
+                                        self.post_list.add(post)
+                                        self.save()
                 except Exception as e:
                     # print("Could not connect to TwitterAPI - are your credentials correct?")
                     print("Exception: " + str(e))
         else:
             print(
-            "Search skipped! Queue: " + str(len(self.post_list)) + " Ratelimit: " + str(self.ratelimit_search[1]) + "/" + str(
+            "Search skipped! Queue: " + str(len(self.post_list.all())) + " Ratelimit: " + str(self.ratelimit_search[1]) + "/" + str(
                 self.ratelimit_search[0]) + " (" + str(self.ratelimit_search[2]) + "%)")
 
     def run_bot(self):
@@ -246,7 +264,6 @@ class TwitterUser(models.Model):
     name = models.CharField(max_length=255, blank=True, null=True)
     verified = models.BooleanField(default=False)
     geo_enabled = models.BooleanField(default=False)
-    twitter_id = models.IntegerField(blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
     default_profile_image = models.BooleanField(default=False)
     profile_image_url = models.CharField(max_length=255, blank=True, null=True)
@@ -281,7 +298,6 @@ class Tweet(models.Model):
     is_quote_status = models.BooleanField(default=False)
     in_reply_to_status_id_str = models.CharField(max_length=255, blank=True, null=True)
     place = models.CharField(max_length=255, blank=True, null=True)
-    post_id = models.IntegerField(blank=True, null=True)
     favorited = models.BooleanField(default=False)
     created_at = models.DateTimeField(blank=True, null=True)
     retweet_count = models.IntegerField(blank=True, null=True)
