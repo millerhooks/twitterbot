@@ -4,7 +4,6 @@ from django.conf import settings
 from django.db import models
 from TwitterAPI import TwitterAPI
 import sys, json, time, threading, random
-from dateutil.parser import parse
 from .widgets.wtc import revisionist_commit_history, whatthecommit
 from .widgets.cleverbot import Cleverbot
 from .widgets.pandora_bot import PandoraBot
@@ -223,7 +222,6 @@ class Bot(models.Model):
     def parse_status_item(self, item, reply='', throttle=False):
         user = item['user']
         post = item
-
 
         twit_dict = TwitterUser().__dict__
         del twit_dict['_state']
