@@ -11,6 +11,15 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 """
 
 import os
+import environ
+
+import logging
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+root = environ.Path(__file__) - 3
+env = environ.Env(DEBUG=(bool, False),)
+environ.Env.read_env()
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,6 +46,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    'contests'
 ]
 
 MIDDLEWARE = [
@@ -73,12 +84,19 @@ WSGI_APPLICATION = 'twitterbot.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/1.10/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+
+
+USE_SQLITE = env.bool('URL_SQLITE', True)
+if USE_SQLITE:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        }
     }
-}
+else:
+    DATABASES = {'default': env.db(default='postgres:///postgresuser:mysecretpass@postgres:5432/postgresuser')}
+    DATABASES['default']['CONN_MAX_AGE'] = 600
 
 
 # Password validation

@@ -15,10 +15,7 @@ __admin__ = [
     'FavoriteKeyword',
     'Bot',
     'TwitterUser',
-    'Tweet',
-    'Favorited',
-    'Followed',
-    'Retweeted'
+    'Tweet'
 ]
 
 BOT_STATUS_CHOICES = (
@@ -75,9 +72,10 @@ class Bot(models.Model):
     follow_keywords = models.ManyToManyField(FollowKeyword)
     fav_keywords = models.ManyToManyField(FavoriteKeyword)
 
-    retweet_list = models.ManyToManyField('TwitterUser')
-    ignore_list = models.ManyToManyField('TwitterUser')
-    retweet_follow_list = models.ManyToManyField('TwitterUser')
+    retweet_list = models.ManyToManyField('Tweet', related_name='retweet_list')
+    favorited_list = models.ManyToManyField('Tweet', related_name='favorited_list')
+    ignore_list = models.ManyToManyField('TwitterUser', related_name='ignore_list')
+    retweet_follow_list = models.ManyToManyField('Tweet', related_name='retweet_follow_list')
 
     def connect(self):
         # Don't edit these unless you know what you're doing.
@@ -152,7 +150,8 @@ class Bot(models.Model):
 
                 r = self.api.request('statuses/retweet/:' + str(post['id']))
                 self.check_error(r)
-                Retweeted.objects.get_or_create(tweet=post, bot=self).save()
+                self.retweet_list.add(post)
+                self.save()
             else:
                 print("Ratelimit at " + str(self.ratelimit[2]) + "% -> pausing retweets")
 
@@ -163,7 +162,9 @@ class Bot(models.Model):
             r = self.api.request('friendships/create', {'screen_name': post.user.screen_name})
             self.check_error(r)
             self.log_and_print("Follow: " + post.user.screen_name)
-            Followed.objects.get_or_create(tweet=post, bot=self).save()
+            self.retweet_follow_list.add(post)
+            self.save()
+
 
     # Check if a post requires you to favorite the tweet.
     # Be careful with this function! Twitter may write ban your application for favoriting too aggressively
@@ -172,7 +173,8 @@ class Bot(models.Model):
             res = self.api.request('favorites/create', {'id': post.id})
             self.check_error(res)
             self.log_and_print("Favorite: " + str(post.id))
-            Favorited.objects.get_or_create(tweet=post, bot=self).save()
+            self.favorited_list.add(post)
+            self.save()
 
     # Scan for new contests, but not too often because of the rate limit.
     def scan_for_contests(self):
@@ -274,24 +276,3 @@ class Tweet(models.Model):
 
     def __str__(self):
         return "%s - %s" % (self.user.name, self.text)
-
-
-class BotEvent(models.Model):
-    bot = models.ForeignKey(Bot, blank=True, null=True)
-    tweet = models.ForeignKey(Tweet, blank=True, null=True)
-    timestamp = models.DateTimeField()
-
-    def __str__(self):
-        return "[%s] %s - %s" % (self.timestamp, self.bot.name, self.tweet)
-
-
-class Followed(BotEvent):
-    pass
-
-
-class Favorited(BotEvent):
-    pass
-
-
-class Retweeted(BotEvent):
-    pass
