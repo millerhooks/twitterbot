@@ -104,7 +104,7 @@ class Bot(models.Model):
             self.log_and_print("We got an error message: "
                                + res['errors'][0]['message'] +
                                " Code: "
-                               + str(res['errors'][0]['code']))
+                               + str(res['errors'][0]['code']), 'x')
 
     def check_rate_limit(self):
         c = threading.Timer(self.rate_limit_update_time, self.check_rate_limit)
@@ -132,7 +132,7 @@ class Bot(models.Model):
                 if percent < 5.0:
                     self.log_and_print(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!",
                                        'x')
-                    sys.exit(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!", 'x')
+                    sys.exit(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!")
                 elif percent < 30.0:
                     self.log_and_print(res_family + " -> " + res + ": " + str(percent) + "  !!! <30% alert !!!", 'x')
                 elif percent < 70.0:
