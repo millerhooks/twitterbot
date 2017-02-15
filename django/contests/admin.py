@@ -13,17 +13,22 @@ class TwitterUserAdmin(admin.ModelAdmin):
 
 
 class TweetAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user',)
+    list_display = ('created_at', 'id', 'user',)
 
 
 class BotAdmin(admin.ModelAdmin):
-    list_display = ('name', 'status',)
-    filter_horizontal = ('search_queries', 'follow_keywords', 'fav_keywords', 'retweet_list', 'favorited_list', 'ignore_list', 'retweet_follow_list')
-    inlines = [TweetInline]
+    list_display = ('name', 'status', 'tweets_in_queue')
+    filter_horizontal = ('search_queries', 'follow_keywords',
+                         'fav_keywords', 'retweet_list',
+                         'favorited_list', 'ignore_list',
+                         'retweet_follow_list', 'post_list')
+
+    def tweets_in_queue(self, obj):
+        return len(obj.post_list.all())
 
 
 class LogAdmin(admin.ModelAdmin):
-    list_display = ('event', 'timestamp',)
+    list_display = ('timestamp', 'type', 'event')
 
 __custom_admins__ = {
     "Bot": BotAdmin,

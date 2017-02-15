@@ -93,8 +93,8 @@ class Bot(models.Model):
         self.ratelimit_search = [999, 999, 100]
 
     @staticmethod
-    def log_and_print(text):
-        log = Log(event=str(text))
+    def log_and_print(text, _type='0'):
+        log = Log(event=str(text), type=_type)
         log.save()
         return log
 
@@ -130,10 +130,11 @@ class Bot(models.Model):
                     self.ratelimit = [limit, remaining, percent]
 
                 if percent < 5.0:
-                    self.log_and_print(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!")
-                    sys.exit(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!")
+                    self.log_and_print(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!",
+                                       'x')
+                    sys.exit(res_family + " -> " + res + ": " + str(percent) + "  !!! <5% Emergency exit !!!", 'x')
                 elif percent < 30.0:
-                    self.log_and_print(res_family + " -> " + res + ": " + str(percent) + "  !!! <30% alert !!!")
+                    self.log_and_print(res_family + " -> " + res + ": " + str(percent) + "  !!! <30% alert !!!", 'x')
                 elif percent < 70.0:
                     print(res_family + " -> " + res + ": " + str(percent))
 
@@ -148,7 +149,7 @@ class Bot(models.Model):
 
         for post in self.post_list.all():
             if not self.ratelimit[2] < self.min_ratelimit_retweet:
-                self.log_and_print("Retweeting: " + str(post.id) + " " + str(post.text))
+                self.log_and_print("Retweeting: " + str(post.id) + " " + str(post.text), '0')
 
                 self.check_for_follow_request(post)
                 self.check_for_favorite_request(post)
@@ -167,7 +168,7 @@ class Bot(models.Model):
         if self.follow_keywords.filter(text=post.text.lower()):
             r = self.api.request('friendships/create', {'screen_name': post.user.screen_name})
             self.check_error(r)
-            self.log_and_print("Follow: " + post.user.screen_name)
+            self.log_and_print("Follow: " + post.user.screen_name, '2')
             self.retweet_follow_list.add(post)
             self.save()
 
@@ -178,7 +179,7 @@ class Bot(models.Model):
         if self.fav_keywords.filter(text=post.text.lower()):
             res = self.api.request('favorites/create', {'id': post.id})
             self.check_error(res)
-            self.log_and_print("Favorite: " + str(post.id))
+            self.log_and_print("Favorite: " + str(post.id), '1')
             self.favorited_list.add(post)
             self.save()
 
