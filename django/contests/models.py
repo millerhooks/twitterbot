@@ -19,6 +19,7 @@ __admin__ = [
     'Bot',
     'TwitterUser',
     'Tweet',
+    'Gibberish'
 ]
 
 BOT_STATUS_CHOICES = (
@@ -45,6 +46,13 @@ TWEET_GENERATORS_CHOICES = (
     ('dnd', 'Dungeons & Dragons'),
     ('all', 'Use all of them')
 )
+
+class Gibberish(models.Model):
+    name = models.CharField(max_length=255)
+    text = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.name
 
 class Log(models.Model):
     event = models.TextField()
