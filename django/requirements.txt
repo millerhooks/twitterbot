@@ -21,7 +21,7 @@ psycopg2==2.6.1
 pypdf2==1.26.0
 python-dateutil==2.5.3
 pytz==2016.4
-redis==2.10.5
+redis==4.4.4
 requests-aws4auth==0.9
 requests==2.10.0
 responses==0.5.1
