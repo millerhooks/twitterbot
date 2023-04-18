@@ -43,7 +43,7 @@ gunicorn==19.6.0
 python3-ghostscript==0.5.0
 aiohttp-wsgi==0.6.5
 aiohttp==1.2.0
-ujson==1.35
+ujson==5.4.0
 raven==5.32.0
 opbeat==3.5.2
 django_hosts==2.0
