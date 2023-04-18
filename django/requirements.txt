@@ -5,7 +5,7 @@ Django==1.10.5
 django-angular==0.7.16
 django-cors-headers==1.1.0
 django-extensions==1.7.3
-django-filter==0.9.2
+django-filter==2.4.0
 django-jsonfield==1.0.0
 django-localflavor-us==1.1
 django-model-utils==2.5
