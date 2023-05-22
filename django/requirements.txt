@@ -23,7 +23,7 @@ python-dateutil==2.5.3
 pytz==2016.4
 redis==2.10.5
 requests-aws4auth==0.9
-requests==2.10.0
+requests==2.31.0
 responses==0.5.1
 six==1.10.0
 sorl-thumbnail==12.3
